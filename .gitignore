@@ -1,0 +1,21 @@
+# Global ignores for workspace-level artifacts
+
+# Python virtual environments and caches
+.venv/
+**/.venv/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+**/.pytest_cache/
+
+# Node/JavaScript
+npm-debug.log*
+yarn-error.log*
+
+# macOS metadata
+.DS_Store
+
+# Packaging/build outputs (root-level)
+dist/
+build/
