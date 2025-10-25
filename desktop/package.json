@@ -1,0 +1,20 @@
+{
+  "name": "ekupkaran-windows",
+  "version": "0.1.0",
+  "description": "Electron-based Windows client for Ekupkaran (port of macOS SwiftUI)",
+  "main": "main.js",
+  "author": "Ekupkaran Maintainers",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "package": "electron-packager . Ekupkaran --platform=win32 --arch=x64 --out=dist --overwrite",
+    "package:arm64": "electron-packager . Ekupkaran --platform=win32 --arch=arm64 --out=dist --overwrite",
+    "lint": "eslint ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.12.0",
+    "electron": "^31.3.0",
+    "electron-packager": "^17.1.2",
+    "eslint": "^9.12.0"
+  }
+}

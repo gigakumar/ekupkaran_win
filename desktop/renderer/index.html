@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' http://localhost:8000 https: 'unsafe-inline' 'unsafe-eval'"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Ekupkaran (Windows)</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <div class="app-title">
+          <h1>Ekupkaran</h1>
+          <span class="tag">Windows Preview</span>
+        </div>
+        <nav>
+          <button data-route="dashboard">Dashboard</button>
+          <button data-route="knowledge">Knowledge</button>
+          <button data-route="planner">Planner</button>
+          <button data-route="settings">Settings</button>
+        </nav>
+      </header>
+
+      <main>
+        <aside id="status-sidebar">
+          <h2>Status</h2>
+          <div id="status-card" class="card">
+            <p class="status-line">
+              <span class="dot" id="status-dot"></span>
+              <span id="status-text">Waiting…</span>
+            </p>
+            <p class="status-meta">Documents indexed: <strong id="status-docs">–</strong></p>
+            <button id="status-refresh">Refresh</button>
+          </div>
+          <div class="card">
+            <h3>Quick actions</h3>
+            <div id="quick-actions"></div>
+          </div>
+          <div class="card">
+            <h3>Plugins</h3>
+            <ul id="plugin-list"></ul>
+          </div>
+        </aside>
+        <section id="view"></section>
+      </main>
+
+      <footer>
+        <small>Local-first automation • Backend: <span id="backend-host">loading...</span></small>
+        <button id="open-docs" class="link">Docs</button>
+      </footer>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>

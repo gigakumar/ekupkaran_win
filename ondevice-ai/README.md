@@ -6,23 +6,27 @@ Minimal local-first assistant runtime with gRPC, deterministic embeddings, and a
 
 Requirements:
 - Python 3.11+
-- macOS with Xcode (for the SwiftUI client, optional)
+- Optional: Xcode if you want to build the macOS SwiftUI client
+
+Create an isolated environment and install dependencies:
 
 ```bash
-python -m venv .venv && source .venv/bin/activate
-python -m pip install -r requirements.txt
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 make proto
 ```
 
 Launch the automation daemon (gRPC server + MLX-compatible HTTP runtime):
 
 ```bash
-python automation_daemon.py
+scripts/run_daemon.sh
 ```
 
-CLI helpers use the same binary:
+Run the CLI helpers from the same environment:
 
 ```bash
+scripts/run_daemon.sh --help  # shows daemon options
 python -m cli.index index "hello world"
 python -m cli.index query "hello"
 python -m cli.index plan "organise my notes"
@@ -33,6 +37,39 @@ Run tests:
 ```bash
 pytest -q
 ```
+
+## Windows quickstart
+
+> 💡 The Windows desktop client expects the HTTP runtime on `http://127.0.0.1:9000`. Use the helper script below to launch it.
+
+1. Open **Windows PowerShell** and change into this folder:
+
+	```powershell
+	cd ondevice-ai
+	```
+
+2. Create the virtual environment and install dependencies (first run only):
+
+	```powershell
+	python -m venv .venv
+	.\.venv\Scripts\Activate.ps1
+	pip install -r requirements.txt
+	```
+
+3. Launch the daemon using the helper script (this reuses `.venv` automatically):
+
+	```powershell
+	.\scripts\run_daemon.ps1
+	```
+
+	- Use `-Port 9100` to change the HTTP port (also update the Electron app Settings).
+	- `-VenvPath` lets you point at a custom environment; defaults to `./.venv`.
+
+When the daemon starts, it stores data under `%USERPROFILE%\.ekupkaran` by default:
+
+- `documents.json` — persisted knowledge base used by the Windows client.
+- `logs\audit.jsonl` — audit trail for planner actions.
+- `plugins\` — user-editable plugin manifests. Bundled plugins are copied here on first run.
 
 ## Layout
 

@@ -4,6 +4,8 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
+import threading
 import time
 import uuid
 from pathlib import Path
@@ -16,9 +18,16 @@ from core.audit import read_events, write_event
 from core.plugins import PluginManifest
 
 
-MODELS_ROOT = Path(os.environ.get("ML_MODELS_DIR", Path(__file__).resolve().parents[1] / "ml_models"))
+DATA_ROOT = Path(os.environ.get("EKUPKARAN_DATA_DIR", Path.home() / ".ekupkaran"))
+MODELS_ROOT = Path(os.environ.get("ML_MODELS_DIR", DATA_ROOT / "models"))
 PLANNER_DIR = MODELS_ROOT / "planner"
-_PLUGINS_DIR = Path(os.environ.get("PLUGINS_DIR", Path(__file__).resolve().parents[1] / "plugins"))
+_DEFAULT_PLUGINS_DIR = Path(__file__).resolve().parents[1] / "plugins"
+_PLUGINS_DIR = Path(os.environ.get("PLUGINS_DIR", DATA_ROOT / "plugins"))
+DOCUMENTS_PATH = DATA_ROOT / "documents.json"
+
+DATA_ROOT.mkdir(parents=True, exist_ok=True)
+MODELS_ROOT.mkdir(parents=True, exist_ok=True)
+_PLUGINS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _fallback_embed(text: str) -> np.ndarray:
@@ -80,6 +89,71 @@ app = Flask("mlx_runtime")
 
 _DOCUMENTS: Dict[str, Dict[str, Any]] = {}
 _VECTORS: Dict[str, np.ndarray] = {}
+_STATE_LOCK = threading.Lock()
+
+
+def _seed_plugins_directory() -> None:
+    if not any(_PLUGINS_DIR.iterdir()) and _DEFAULT_PLUGINS_DIR.exists():
+        for item in _DEFAULT_PLUGINS_DIR.iterdir():
+            dest = _PLUGINS_DIR / item.name
+            if dest.exists():
+                continue
+            if item.is_dir():
+                shutil.copytree(item, dest)
+            else:
+                shutil.copy2(item, dest)
+
+
+def _load_documents() -> None:
+    if not DOCUMENTS_PATH.exists():
+        _seed_plugins_directory()
+        return
+    try:
+        with DOCUMENTS_PATH.open("r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+    except Exception:
+        return
+    for doc in payload.get("documents", []):
+        doc_id = doc.get("id")
+        vector = doc.get("vector")
+        if not doc_id or vector is None:
+            continue
+        _DOCUMENTS[doc_id] = {
+            key: value for key, value in doc.items() if key not in {"vector"}
+        }
+        _VECTORS[doc_id] = np.array(vector, dtype=np.float32)
+
+
+def _persist_documents() -> None:
+    with _STATE_LOCK:
+        serialisable: List[Dict[str, Any]] = []
+        for doc_id, doc in _DOCUMENTS.items():
+            vector = _VECTORS.get(doc_id)
+            serialisable.append({
+                **doc,
+                "id": doc_id,
+                "vector": vector.astype(float).tolist() if vector is not None else [],
+            })
+        DOCUMENTS_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with DOCUMENTS_PATH.open("w", encoding="utf-8") as handle:
+            json.dump({"documents": serialisable}, handle, ensure_ascii=False, indent=2)
+
+
+_load_documents()
+
+
+def plugin_list() -> List[Dict[str, Any]]:
+    manifests: List[Dict[str, Any]] = []
+    for base in (_PLUGINS_DIR, _DEFAULT_PLUGINS_DIR):
+        manifest_path = base / "plugin-manifest.yaml"
+        if not manifest_path.exists():
+            continue
+        try:
+            manifest = PluginManifest.load(str(manifest_path))
+        except Exception:
+            continue
+        manifests.append(manifest.__dict__)
+    return manifests
 
 
 def _cosine(a: np.ndarray, b: np.ndarray) -> float:
@@ -95,7 +169,15 @@ def _doc_preview(text: str) -> str:
 
 @app.route("/health", methods=["GET"])
 def health() -> Any:
-    return jsonify({"status": "ok", "documents": len(_DOCUMENTS)})
+    return jsonify({
+        "status": "ok",
+        "documents": len(_DOCUMENTS),
+        "backend": {
+            "host": request.host,
+            "plugins": len(list(plugin_list())),
+            "storage": str(DOCUMENTS_PATH),
+        },
+    })
 
 
 @app.route("/embed", methods=["POST"])
@@ -127,6 +209,7 @@ def index_document() -> Any:
     _DOCUMENTS[doc_id] = {"id": doc_id, "source": source, "ts": ts, "text": text}
     _VECTORS[doc_id] = vector
     write_event({"type": "document_indexed", "id": doc_id, "source": source})
+    _persist_documents()
     return jsonify({"id": doc_id, "source": source, "ts": ts, "preview": _doc_preview(text)})
 
 
@@ -183,6 +266,17 @@ def document_detail(doc_id: str) -> Any:
     return jsonify(doc)
 
 
+@app.route("/documents/<doc_id>", methods=["DELETE"])
+def delete_document(doc_id: str) -> Any:
+    if doc_id not in _DOCUMENTS:
+        return jsonify({"status": "not_found"}), 404
+    _DOCUMENTS.pop(doc_id, None)
+    _VECTORS.pop(doc_id, None)
+    write_event({"type": "document_deleted", "id": doc_id})
+    _persist_documents()
+    return jsonify({"status": "deleted"})
+
+
 @app.route("/audit", methods=["GET", "POST"])
 def audit() -> Any:
     if request.method == "POST":
@@ -195,11 +289,7 @@ def audit() -> Any:
 
 @app.route("/plugins", methods=["GET"])
 def plugins() -> Any:
-    manifest_path = _PLUGINS_DIR / "plugin-manifest.yaml"
-    if not manifest_path.exists():
-        return jsonify({"plugins": []})
-    manifest = PluginManifest.load(str(manifest_path))
-    return jsonify({"plugins": [manifest.__dict__]})
+    return jsonify({"plugins": plugin_list()})
 
 
 if __name__ == "__main__":  # pragma: no cover
